@@ -62,5 +62,10 @@ app.post('/generate-pdf', async (req, res) => {
     }
 });
 
+// Use the port Railway gives us, or fallback to 3000 for local testing
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`PDF Service running on port ${PORT}`));
+
+// Listen on '0.0.0.0' to ensure external access (critical for Docker/Railway)
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`PDF Service running on port ${PORT}`);
+});
