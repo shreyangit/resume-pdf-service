@@ -14,12 +14,20 @@ app.post('/generate-pdf', async (req, res) => {
         return res.status(400).send('Missing HTML content');
     }
 
+    let browser = null;
+
     try {
-        const browser = await chromium.launch({ 
+        browser = await chromium.launch({ 
             headless: true,
-            // These args help it run in containerized environments like Railway
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            // CRITICAL FIX: These arguments prevent Docker crashes
+            args: [
+                '--no-sandbox', 
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage', // Prevents memory crash in Docker
+                '--disable-gpu'            // Disables GPU hardware acceleration
+            ]
         });
+
         const page = await browser.newPage();
 
         // Construct the full page
@@ -48,8 +56,6 @@ app.post('/generate-pdf', async (req, res) => {
             margin: { top: '0px', right: '0px', bottom: '0px', left: '0px' } 
         });
 
-        await browser.close();
-
         res.set({
             'Content-Type': 'application/pdf',
             'Content-Length': pdfBuffer.length,
@@ -59,6 +65,11 @@ app.post('/generate-pdf', async (req, res) => {
     } catch (error) {
         console.error('PDF Generation Error:', error);
         res.status(500).send('PDF Generation Failed');
+    } finally {
+        // Ensure browser always closes to prevent zombie processes
+        if (browser) {
+            await browser.close();
+        }
     }
 });
 
