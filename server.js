@@ -1,0 +1,66 @@
+const express = require('express');
+const { chromium } = require('playwright');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+
+const app = express();
+app.use(cors());
+app.use(bodyParser.json({ limit: '10mb' })); // Allow large HTML payloads
+
+app.post('/generate-pdf', async (req, res) => {
+    const { html, css } = req.body;
+
+    if (!html) {
+        return res.status(400).send('Missing HTML content');
+    }
+
+    try {
+        const browser = await chromium.launch({ 
+            headless: true,
+            // These args help it run in containerized environments like Railway
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
+        const page = await browser.newPage();
+
+        // Construct the full page
+        const fullContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    /* Reset & Base Styles */
+                    body { margin: 0; padding: 0; box-sizing: border-box; font-family: sans-serif; }
+                    ${css}
+                </style>
+            </head>
+            <body>
+                <div id="resume-container">${html}</div>
+            </body>
+            </html>
+        `;
+
+        await page.setContent(fullContent, { waitUntil: 'networkidle' });
+
+        // Generate PDF (A4 Size)
+        const pdfBuffer = await page.pdf({
+            format: 'A4',
+            printBackground: true,
+            margin: { top: '0px', right: '0px', bottom: '0px', left: '0px' } 
+        });
+
+        await browser.close();
+
+        res.set({
+            'Content-Type': 'application/pdf',
+            'Content-Length': pdfBuffer.length,
+        });
+        res.send(pdfBuffer);
+
+    } catch (error) {
+        console.error('PDF Generation Error:', error);
+        res.status(500).send('PDF Generation Failed');
+    }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`PDF Service running on port ${PORT}`));
